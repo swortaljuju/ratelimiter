@@ -9,3 +9,6 @@ Rate limiter knowledges
 
 Implementation:
 Redis db has good implementation
+
+Contains:
+Python impl w/o redis
