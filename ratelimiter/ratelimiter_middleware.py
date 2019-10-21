@@ -2,6 +2,7 @@ from decouple import config
 from django.utils.deprecation import MiddlewareMixin
 from constants import RATE_THRESHOLD
 from django.http import HttpResponse
+from http import HTTPStatus
 import random
 
 DUMMY_RATELIMITER_THRESHOLD = 7
@@ -18,5 +19,5 @@ class RateLimiterMiddleware(MiddlewareMixin):
                 return None
             else:
                 print('dummy ratelimiter request failed')
-                return HttpResponse(status=429)
+                return HttpResponse(status=HTTPStatus.TOO_MANY_REQUESTS)
         return None
