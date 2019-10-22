@@ -14,10 +14,36 @@ class RateLimiterMiddleware(MiddlewareMixin):
             print('ratelimiter middleware. threshold=%s' % RATE_THRESHOLD)
         # A ratelimiter to test manual_test_scripts.
         if '/dummy' in request.path:
-            if (random.randrange(10) >= DUMMY_RATELIMITER_THRESHOLD):
-                print('dummy ratelimiter request succeed')
-                return None
-            else:
-                print('dummy ratelimiter request failed')
-                return HttpResponse(status=HTTPStatus.TOO_MANY_REQUESTS)
+            return self.dummyLimit()
+        elif '/token' in request.path:
+            return self.tokenLimit()
+        elif '/leaky_token' in request.path:
+            return self.leakyTokenLimit()
+        elif '/fixed_window' in request.path:
+            return self.fixedWindowLimit()
+        elif '/sliding_window_log' in request.path:
+            return self.slidingWindowLogLimit()
+        elif '/sliding_window_prorate' in request.path:
+            return self.slidingWindowProrateLimit()    
         return None
+
+    def dummyLimit(self):
+        if (random.randrange(10) >= DUMMY_RATELIMITER_THRESHOLD):
+            return None
+        else:
+            return HttpResponse(status=HTTPStatus.TOO_MANY_REQUESTS)
+
+    def tokenLimit(self):
+        return None        
+
+    def leakyTokenLimit(self):
+        return None
+
+    def fixedWindowLimit(self):
+        return None
+    
+    def slidingWindowLogLimit(self):
+        return None
+    
+    def slidingWindowProrateLimit(self):
+        return None    
