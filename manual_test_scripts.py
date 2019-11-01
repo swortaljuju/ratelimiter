@@ -22,6 +22,8 @@ NUMBER_REQUEST_PER_TEST = 100
 NUMBER_ITERATION_PER_TEST = 5
 
 # A class to collect single test's result
+
+
 class Tracker(object):
     def __init__(self, testName):
         self.__testName__ = testName
@@ -95,13 +97,13 @@ def main(rateLimiter):
     assert(RATE_THRESHOLD <= MAX_RATE, 'rate exceeds limit')
     conn = http.client.HTTPConnection(
         config('HTTP_HOST'), config('HTTP_HOST_PORT'))
-    rateLimiterUrl = "/ratelimiter_test/%s" % rateLimiter
+    rateLimiterUrl = "/ratelimiter_test/%s/index" % rateLimiter
     testTrackers = []
 
     runTest(testUniformedDistribution, RATE_THRESHOLD / 2, testTrackers)
     runTest(testUniformedDistribution, RATE_THRESHOLD, testTrackers)
     runTest(testUniformedDistribution, RATE_THRESHOLD * 2, testTrackers)
-    
+
     for tracker in testTrackers:
         print(tracker)
 
