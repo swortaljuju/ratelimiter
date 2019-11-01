@@ -65,7 +65,7 @@ LEAKY_BUCKET_LUA = '''
 
 leaky_bucket_script = redis_client.register_script(LEAKY_BUCKET_LUA)
 
-TIME_SEC_PER_BUCKET = round(TOKEN_PER_BUCKET / RATE_THRESHOLD, 4)
+TIME_SEC_PER_BUCKET = TOKEN_PER_BUCKET / RATE_THRESHOLD
 
 
 class RateLimiterMiddleware(MiddlewareMixin):
@@ -126,4 +126,4 @@ class RateLimiterMiddleware(MiddlewareMixin):
         return (self.success() if lua_result == 1 else self.fail())
 
     def __getCurrentWindow(self):
-        return round(time.time() / TIME_SEC_PER_BUCKET, 4)
+        return int(time.time() / TIME_SEC_PER_BUCKET)
