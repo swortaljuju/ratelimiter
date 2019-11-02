@@ -67,6 +67,21 @@ leaky_bucket_script = redis_client.register_script(LEAKY_BUCKET_LUA)
 
 TIME_SEC_PER_BUCKET = TOKEN_PER_BUCKET / RATE_THRESHOLD
 
+SLIDING_WINDOW_LOG_LUA = '''
+  redis.call("ZREMRANGEBYSCORE", KEYS[1], -1/0, ARGV[1] - %f);
+  local windowSize = redis.call("ZCARD", KEYS[1]);
+  if (windowSize == %d)
+  then
+    return 0;
+  end
+  local value = redis.call("INCR", KEYS[1] .. "_counter");
+  redis.call("ZADD", KEYS[1], ARGV[1], value);
+  return 1;
+''' % (TIME_SEC_PER_BUCKET, TOKEN_PER_BUCKET)
+
+sliding_window_log_script = redis_client.register_script(
+    SLIDING_WINDOW_LOG_LUA)
+
 
 class RateLimiterMiddleware(MiddlewareMixin):
     def process_request(self, request):
@@ -111,7 +126,9 @@ class RateLimiterMiddleware(MiddlewareMixin):
         return self.__success() if res[1] >= 0 else self.__fail()
 
     def __slidingWindowLogLimit(self):
-        return None
+        lua_result = sliding_window_log_script(
+            keys=["sliding_window_log"], args=[time.time()])
+        return self.__parseLuaResult(lua_result)
 
     def __slidingWindowProrateLimit(self):
         return None
@@ -123,7 +140,7 @@ class RateLimiterMiddleware(MiddlewareMixin):
         return None
 
     def __parseLuaResult(self, lua_result):
-        return (self.success() if lua_result == 1 else self.fail())
+        return (self.__success() if lua_result == 1 else self.__fail())
 
     def __getCurrentWindow(self):
         return int(time.time() / TIME_SEC_PER_BUCKET)
