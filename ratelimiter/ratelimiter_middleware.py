@@ -6,6 +6,7 @@ from http import HTTPStatus
 import random
 import redis
 import time
+import math
 
 DUMMY_RATELIMITER_THRESHOLD = 7
 
@@ -82,6 +83,29 @@ SLIDING_WINDOW_LOG_LUA = '''
 sliding_window_log_script = redis_client.register_script(
     SLIDING_WINDOW_LOG_LUA)
 
+SLIDING_WINDOW_PRORATE_LUA = '''
+  local currentKey = KEYS[1] .. KEYS[2];
+  local previousKey = KEYS[1] .. (KEYS[2] - 1);
+  redis.call("SET", currentKey, 0, "NX", "EX", math.max(1 , %d));
+  local currentCnt = redis.call("GET", currentKey);
+  local previousCnt = redis.call("GET", previousKey);
+  if (previousCnt == false)
+  then
+    previousCnt = 0;
+  end
+
+  if (currentCnt + previousCnt * ARGV[1] < %d)
+  then
+    redis.call("INCR", currentKey);
+    return 1;
+  else
+    return 0;
+  end
+    ''' % (int(4 * TIME_SEC_PER_BUCKET), TOKEN_PER_BUCKET)
+
+sliding_window_prorate_script = redis_client.register_script(
+    SLIDING_WINDOW_PRORATE_LUA)
+
 
 class RateLimiterMiddleware(MiddlewareMixin):
     def process_request(self, request):
@@ -131,7 +155,12 @@ class RateLimiterMiddleware(MiddlewareMixin):
         return self.__parseLuaResult(lua_result)
 
     def __slidingWindowProrateLimit(self):
-        return None
+        currentTime = time.time()
+        currentWindow = self.__getFixedWindow(currentTime)
+        previousWindowPortion = currentWindow + 1 - currentTime / TIME_SEC_PER_BUCKET
+        lua_result = sliding_window_prorate_script(
+            keys=["sliding_window_prorate_", currentWindow], args=[previousWindowPortion])
+        return self.__parseLuaResult(lua_result)
 
     def __fail(self):
         return HttpResponse(status=HTTPStatus.TOO_MANY_REQUESTS)
@@ -143,4 +172,7 @@ class RateLimiterMiddleware(MiddlewareMixin):
         return (self.__success() if lua_result == 1 else self.__fail())
 
     def __getCurrentWindow(self):
-        return int(time.time() / TIME_SEC_PER_BUCKET)
+        return self.__getFixedWindow(time.time())
+
+    def __getFixedWindow(self, time_sec):
+        return int(math.floor(time_sec / TIME_SEC_PER_BUCKET))
