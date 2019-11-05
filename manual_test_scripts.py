@@ -15,123 +15,114 @@ MAX_RATE = 15
 
 
 class Tracker(object):
-    def __init__(self, testName):
-        self.__testName__ = testName
+    def __init__(self, test_name):
+        self._test_name = test_name
         super().__init__()
 
     def start(self, is_paused=False):
-        self.__successCount__ = 0
-        self.__sentCount__ = 0
-        self.__startTime__ = time.time()
-        self.__totalTime__ = 0
-        self.__isPaused__ = is_paused
+        self._success_count = 0
+        self._sent_count = 0
+        self._start_time = time.time()
+        self._total_time = 0
+        self._is_paused = is_paused
 
-    def logSuccessRequest(self):
-        self.__successCount__ += 1
+    def log_success_request(self):
+        self._success_count += 1
 
-    def logSentRequest(self):
-        self.__sentCount__ += 1
+    def log_sent_request(self):
+        self._sent_count += 1
 
     def pause(self):
-        assert(not self.__isPaused__)
-        self.__totalTime__ += time.time() - self.__startTime__
-        self.__isPaused__ = True
+        assert(not self._is_paused)
+        self._total_time += time.time() - self._start_time
+        self._is_paused = True
 
     def resume(self):
-        assert(self.__isPaused__)
-        self.__startTime__ = time.time()
-        self.__isPaused__ = False
+        assert(self._is_paused)
+        self._start_time = time.time()
+        self._is_paused = False
 
     def end(self):
-        if (not self.__isPaused__):
-            self.__totalTime__ += time.time() - self.__startTime__
-        self.__successRate__ = self.__successCount__ / self.__totalTime__
-        self.__sentRate__ = self.__sentCount__ / self.__totalTime__
+        if (not self._is_paused):
+            self._total_time += time.time() - self._start_time
+        self._success_rate = self._success_count / self._total_time
+        self._sent_rate = self._sent_count / self._total_time
 
     def __str__(self):
         return ('test: %s; actual rate: %s; sending rate: %.4f;' %
-                (colored(self.__testName__, 'blue'), colored('%.4f' % self.__successRate__, 'yellow'),
-                 self.__sentRate__))
+                (colored(self._test_name, 'blue'), colored('%.4f' % self._success_rate, 'yellow'),
+                 self._sent_rate))
 
 
 class TrackerForVerify(Tracker):
     def __str__(self):
-        return super().__str__() + (colored('Failed', 'red') if self.__successRate__ >
+        return super().__str__() + (colored('Failed', 'red') if self._success_rate >
                                     RATE_THRESHOLD else colored('Passed', 'green'))
 
 
-def sendRequest(minDuration, tracker, conn, rateLimiterUrl):
-    '''
-        minDuration: float
-            Minimum duration to execute this function
-    '''
-    startTime = time.time()
-    conn.request("GET", rateLimiterUrl)
+def send_request(min_duration, tracker, conn, rate_limiter_url):
+    start_time = time.time()
+    conn.request("GET", rate_limiter_url)
     r1 = conn.getresponse()
-    tracker.logSentRequest()
+    tracker.log_sent_request()
     if (r1.status != HTTPStatus.TOO_MANY_REQUESTS):
-        tracker.logSuccessRequest()
+        tracker.log_success_request()
     r1.read()
-    duration = time.time() - startTime
+    duration = time.time() - start_time
     # Sleep if min duration hasn't been reached
-    time.sleep(max(0, minDuration - duration))
+    time.sleep(max(0, min_duration - duration))
 
 
-def runTest(testMethod, rate, testTrackers, number_request_per_test,
-            number_iteration_per_test, conn, rateLimiterUrl):
+def run_test(test_method, rate, test_trackers, number_request_per_test,
+             number_iteration_per_test, conn, rate_limiter_url):
     for i in range(number_iteration_per_test):
-        testTrackers.append(
-            testMethod(
+        test_trackers.append(
+            test_method(
                 rate,
                 number_request_per_test,
                 conn,
-                rateLimiterUrl))
+                rate_limiter_url))
 
 
-def testUniformedDistribution(
-        rate, number_request_per_test, conn, rateLimiterUrl):
-    '''
-        A test whose request's time gap is a constant
-        rate: float
-            # requests per seconds
-    '''
-    minRequestDuration = 1 / rate
+def test_uniformed_distribution(
+        rate, number_request_per_test, conn, rate_limiter_url):
+    min_request_duration = 1 / rate
     tracker = TrackerForVerify(
         ('Uniformed Distribution Test with Rate %s' % rate))
     tracker.start()
     for x in range(number_request_per_test):
-        sendRequest(minRequestDuration, tracker, conn, rateLimiterUrl)
+        send_request(min_request_duration, tracker, conn, rate_limiter_url)
     tracker.end()
     return tracker
 
 
-def sendRequestAtRate(tracker, conn, rateLimiterUrl, rate, duration):
+def send_request_at_rate(tracker, conn, rate_limiter_url, rate, duration):
     interval = 1 / rate
     current_time = time.time()
     end_time = current_time + duration
     while (end_time > current_time):
-        sendRequest(interval, tracker, conn, rateLimiterUrl)
+        send_request(interval, tracker, conn, rate_limiter_url)
         current_time = time.time()
 
 
-def verify(rateLimiter):
-    print('%s manual test. rate threshold=%s' % (rateLimiter, RATE_THRESHOLD))
+def verify(rate_limiter):
+    print('%s manual test. rate threshold=%s' % (rate_limiter, RATE_THRESHOLD))
     assert(RATE_THRESHOLD <= MAX_RATE, 'rate exceeds limit')
     conn = http.client.HTTPConnection(
         config('HTTP_HOST'), config('HTTP_HOST_PORT'))
-    rateLimiterUrl = "/ratelimiter_test/%s/index" % rateLimiter
-    testTrackers = []
+    rate_limiter_url = "/ratelimiter_test/%s/index" % rate_limiter
+    test_trackers = []
     number_request_per_test = 100
     number_iteration_per_test = 5
 
-    runTest(testUniformedDistribution, RATE_THRESHOLD / 2,
-            testTrackers, number_request_per_test, number_iteration_per_test, conn, rateLimiterUrl)
-    runTest(testUniformedDistribution, RATE_THRESHOLD, testTrackers,
-            number_request_per_test, number_iteration_per_test, conn, rateLimiterUrl)
-    runTest(testUniformedDistribution, RATE_THRESHOLD * 2, testTrackers,
-            number_request_per_test, number_iteration_per_test, conn, rateLimiterUrl)
+    run_test(test_uniformed_distribution, RATE_THRESHOLD / 2,
+             test_trackers, number_request_per_test, number_iteration_per_test, conn, rate_limiter_url)
+    run_test(test_uniformed_distribution, RATE_THRESHOLD, test_trackers,
+             number_request_per_test, number_iteration_per_test, conn, rate_limiter_url)
+    run_test(test_uniformed_distribution, RATE_THRESHOLD * 2, test_trackers,
+             number_request_per_test, number_iteration_per_test, conn, rate_limiter_url)
 
-    for tracker in testTrackers:
+    for tracker in test_trackers:
         print(tracker)
 
 # Test how well each ratelimiter performs under special tests.
@@ -141,7 +132,7 @@ def compare():
     assert(RATE_THRESHOLD <= MAX_RATE, 'rate exceeds limit')
     conn = http.client.HTTPConnection(
         config('HTTP_HOST'), config('HTTP_HOST_PORT'))
-    ratelimiters = [
+    rate_limiters = [
         'token',
         'leaky_token',
         'fixed_window',
@@ -151,30 +142,30 @@ def compare():
         random.uniform(
             0, 2) for _ in itertools.repeat(
             None, 100)]
-    for rateLimiter in ratelimiters:
-        rateLimiterUrl = "/ratelimiter_test/%s/index" % rateLimiter
+    for rate_limiter in rate_limiters:
+        rate_limiter_url = "/ratelimiter_test/%s/index" % rate_limiter
         background_tracker = Tracker(
             "%s flusing test background requests metric:" %
-            rateLimiter)
+            rate_limiter)
         flush_tracker = Tracker(
             "%s flusing test flush requests metric:" %
-            rateLimiter)
+            rate_limiter)
         background_tracker.start(is_paused=True)
         flush_tracker.start(is_paused=True)
         for interval in flush_intervals:
             background_tracker.resume()
-            sendRequestAtRate(
+            send_request_at_rate(
                 background_tracker,
                 conn,
-                rateLimiterUrl,
+                rate_limiter_url,
                 RATE_THRESHOLD / 2,
                 interval)
             background_tracker.pause()
             flush_tracker.resume()
-            sendRequestAtRate(
+            send_request_at_rate(
                 flush_tracker,
                 conn,
-                rateLimiterUrl,
+                rate_limiter_url,
                 RATE_THRESHOLD * 2,
                 1)
             flush_tracker.pause()
