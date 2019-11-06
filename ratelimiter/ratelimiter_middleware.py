@@ -17,6 +17,8 @@ redis_client = redis.Redis(
     port=config(
         'REDIS_PORT',
         cast=int))
+        
+# LUA script for token bucket ratelimiter.
 TOKEN_BUCKET_LUA = '''
   local key = "token_bucket";
   local tokensPerBucket = %d;
@@ -40,6 +42,7 @@ TOKEN_BUCKET_LUA = '''
 
 token_bucket_script = redis_client.register_script(TOKEN_BUCKET_LUA)
 
+# LUA script for leaky bucket ratelimiter.
 LEAKY_BUCKET_LUA = '''
   local key = "leaky_bucket";
   local tokensPerBucket = %d;
@@ -70,6 +73,7 @@ TOKEN_PER_BUCKET = 10
 
 TIME_SEC_PER_BUCKET = TOKEN_PER_BUCKET / RATE_THRESHOLD
 
+# LUA script for sliding window log ratelimiter.
 SLIDING_WINDOW_LOG_LUA = '''
   local key = "sliding_window_log";
   redis.call("ZREMRANGEBYSCORE", key, -1/0, ARGV[1] - %f);
@@ -86,6 +90,7 @@ SLIDING_WINDOW_LOG_LUA = '''
 sliding_window_log_script = redis_client.register_script(
     SLIDING_WINDOW_LOG_LUA)
 
+# LUA script for sliding window prorate ratelimiter.
 SLIDING_WINDOW_PRORATE_LUA = '''
   local key = "sliding_window_prorate_"
   local currentKey = key .. KEYS[1];
